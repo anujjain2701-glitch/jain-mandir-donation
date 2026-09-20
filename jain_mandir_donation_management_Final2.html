@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shri Digamber Jain Mandir Bhogal - Donation System</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- SheetJS (xlsx) for Excel Parse & Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- QRCode.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Hind:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+    
+    body {
+      font-family: 'Poppins', 'Hind', sans-serif;
+      background-color: #fcf8f2;
+    }
+    
+    .jain-header {
+      background: linear-gradient(135deg, #8B0000 0%, #A52A2A 50%, #B22222 100%);
+    }
+
+    .print-only {
+      display: none;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printableReceiptModal, #printableReceiptModal * {
+        visibility: visible;
+      }
+      #printableReceiptModal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        background: white !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col">
+
+  <!-- TOP HEADER -->
+  <header class="jain-header text-white shadow-md p-4 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="bg-amber-400 text-red-900 rounded-full w-12 h-12 flex items-center justify-center font-bold text-2xl shadow">
+          卐
+        </div>
+        <div>
+          <h1 id="headerTitle" class="text-xl md:text-2xl font-bold tracking-wide text-amber-200">
+            Shri Mahaveer Swami Digamber Jain Mandir Bhogal
+          </h1>
+          <p id="headerSub" class="text-xs md:text-sm text-amber-100 opacity-90">
+            Jain Sabha Registered Bhogal, New Delhi - 110014 | Mob: +91-9811277267
+          </p>
+        </div>
+      </div>
+
+      <!-- Controls Right Header -->
+      <div class="flex items-center space-x-3">
+        <!-- Language Switcher -->
+        <div class="bg-amber-900/60 p-1 rounded-lg border border-amber-400/30 flex text-sm font-medium">
+          <button id="langHi" onclick="setLanguage('hi')" class="px-3 py-1 rounded-md transition duration-200 text-amber-200 hover:text-white">हिंदी</button>
+          <button id="langEn" onclick="setLanguage('en')" class="px-3 py-1 rounded-md bg-amber-500 text-red-950 font-semibold shadow">English</button>
+        </div>
+
+        <!-- Sync Status -->
+        <div id="syncBadge" class="bg-emerald-800/80 text-emerald-200 text-xs px-3 py-1.5 rounded-full border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="syncText">Online / Live</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN NAVIGATION TABS -->
+  <div class="bg-amber-100 border-b border-amber-200 sticky top-[72px] z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 flex space-x-2 md:space-x-6 overflow-x-auto">
+      <button onclick="switchTab('new-receipt')" id="tab-new-receipt" class="tab-btn py-3 px-4 font-semibold text-red-900 border-b-4 border-red-800 flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-receipt text-amber-700"></i> <span data-key="tabNewReceipt">New Receipt</span>
+      </button>
+      <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn py-3 px-4 font-semibold text-gray-600 hover:text-red-900 border-b-4 border-transparent flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-chart-line text-amber-700"></i> <span data-key="tabReports">Reports & Analytics</span>
+      </button>
+      <button onclick="switchTab('upload-db')" id="tab-upload-db" class="tab-btn py-3 px-4 font-semibold text-gray-600 hover:text-red-900 border-b-4 border-transparent flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-file-excel text-amber-700"></i> <span data-key="tabUploadDb">Upload Donor DB</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+
+    <!-- 1. NEW RECEIPT VIEW -->
+    <section id="view-new-receipt" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- DONOR FORM -->
+      <div class="lg:col-span-8 space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+          <h2 class="text-lg font-bold text-red-900 mb-4 pb-2 border-b border-amber-100 flex items-center gap-2">
+            <i class="fa-solid fa-user-pen text-amber-600"></i> <span data-key="donorInfoHeading">Donor Information</span>
+          </h2>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
+            <!-- Name Field -->
+            <div class="relative md:col-span-2">
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="labelName">Donor Name*</label>
+              <div class="relative">
+                <input type="text" id="donorName" oninput="handleNameSearch(this.value)" autocomplete="off"
+                  class="w-full px-4 py-3 rounded-xl border-2 border-amber-200 focus:border-red-700 focus:ring-0 text-gray-800 text-lg font-medium shadow-sm pl-10"
+                  placeholder="Enter at least 3 letters to search...">
+                <i class="fa-solid fa-user absolute left-3.5 top-4 text-amber-600"></i>
+              </div>
+              
+              <div id="suggestionsBox" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border-2 border-amber-300 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto">
+              </div>
+            </div>
+
+            <!-- Phone Field -->
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="labelPhone">Phone Number</label>
+              <div class="relative">
+                <input type="tel" id="donorPhone"
+                  class="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-red-700 focus:ring-0 text-gray-800 font-medium pl-10"
+                  placeholder="10-digit mobile number">
+                <i class="fa-solid fa-phone absolute left-3.5 top-3.5 text-gray-400"></i>
+              </div>
+            </div>
+
+            <!-- Address Field -->
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="labelAddress">Address</label>
+              <div class="relative">
+                <input type="text" id="donorAddress"
+                  class="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-red-700 focus:ring-0 text-gray-800 font-medium pl-10"
+                  placeholder="Donor address">
+                <i class="fa-solid fa-location-dot absolute left-3.5 top-3.5 text-gray-400"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DONATION CATEGORIES -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+          <h2 class="text-lg font-bold text-red-900 mb-4 pb-2 border-b border-amber-100 flex items-center gap-2">
+            <i class="fa-solid fa-hand-holding-dollar text-amber-600"></i> <span data-key="donationBreakdownHeading">Donation Categories (Amounts in ₹)</span>
+          </h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanAhaar">Ahaar Daan (आहार दान)</label>
+              <input type="number" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanSamagri">Samagri Daan (सामग्री दान)</label>
+              <input type="number" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanAushadhi">Aushadhi Daan (औषधि दान)</label>
+              <input type="number" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanPakshi">Pakshi Ahaar Daan (पक्षी आहार)</label>
+              <input type="number" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanNirmaan">Mandir Nirmaan Daan (निर्माण)</label>
+              <input type="number" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+            </div>
+            
+            <!-- OTHER DAAN & DESCRIPTION FIELD -->
+            <div class="space-y-2">
+              <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1" data-key="daanOther">Other / Custom Daan (अन्य)</label>
+                <input type="number" id="otherDaanAmount" min="0" oninput="calculateTotal()" class="daan-input w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:border-red-700 text-lg font-semibold text-amber-900" placeholder="0">
+              </div>
+              <div>
+                <input type="text" id="otherDaanRemark" class="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-300 focus:border-red-700 text-gray-700 font-medium" placeholder="Specify detail (e.g. Laddoo Boli, Shantidhara)...">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT SUMMARY & QR CODE -->
+      <div class="lg:col-span-4 space-y-6">
+        <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-6 rounded-2xl shadow-lg border border-amber-400 text-center">
+          <span class="text-xs uppercase font-bold tracking-widest text-amber-100" data-key="grandTotalLabel">Grand Total Amount</span>
+          <div class="text-4xl md:text-5xl font-black mt-2 tracking-tight text-white" id="grandTotalDisplay">₹ 0</div>
+        </div>
+
+        <!-- STATIC UPI QR CODE DISPLAY -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-amber-200 text-center">
+          <h3 class="text-sm font-bold text-gray-700 mb-3" data-key="qrHeading">Scan & Pay via UPI / GPay</h3>
+          <div class="inline-block p-3 bg-amber-50 border-2 border-amber-300 rounded-xl shadow-inner">
+            <div id="qrcodeCanvas" class="flex justify-center"></div>
+          </div>
+          <p class="text-xs font-semibold text-amber-900 mt-2">UPI ID: <span class="font-mono bg-amber-100 px-2 py-0.5 rounded">shridigamberjainmandirbhogal@upi</span></p>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="space-y-3">
+          <button onclick="saveAndPrintReceipt()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition duration-200 text-lg flex items-center justify-center gap-2">
+            <i class="fa-solid fa-print"></i> <span data-key="btnPrint">Save & Print Receipt</span>
+          </button>
+          <button onclick="clearForm()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl transition text-sm flex items-center justify-center gap-2">
+            <i class="fa-solid fa-eraser"></i> <span data-key="btnClear">Clear Form</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. REPORTS & ANALYTICS VIEW -->
+    <section id="view-reports" class="hidden space-y-6">
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-amber-200">
+        <h2 class="text-lg font-bold text-red-900 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-filter text-amber-600"></i> <span data-key="filterHeading">Report Filters & Export</span>
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1" data-key="lblFromDate">From Date:</label>
+            <input type="date" id="filterFromDate" class="w-full border border-gray-300 rounded-lg p-2 text-sm font-medium">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1" data-key="lblToDate">To Date:</label>
+            <input type="date" id="filterToDate" class="w-full border border-gray-300 rounded-lg p-2 text-sm font-medium">
+          </div>
+          <div>
+            <button onclick="applyReportFilters()" class="w-full bg-amber-700 hover:bg-amber-800 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center justify-center gap-2">
+              <i class="fa-solid fa-magnifying-glass"></i> <span data-key="btnApplyFilter">Apply Filters</span>
+            </button>
+          </div>
+          <div>
+            <button onclick="exportToExcel()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center justify-center gap-2">
+              <i class="fa-solid fa-file-excel"></i> <span data-key="btnExportExcel">Download Excel Report</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- METRICS -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm">
+          <p class="text-xs font-bold text-gray-500 uppercase" data-key="lblTotalColl">Total Collection</p>
+          <p class="text-3xl font-black text-emerald-600 mt-1" id="statTotalAmount">₹ 0</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm">
+          <p class="text-xs font-bold text-gray-500 uppercase" data-key="lblValidReceipts">Valid Receipts</p>
+          <p class="text-3xl font-black text-amber-800 mt-1" id="statValidCount">0</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm">
+          <p class="text-xs font-bold text-gray-500 uppercase" data-key="lblCancelledReceipts">Cancelled Receipts</p>
+          <p class="text-3xl font-black text-red-600 mt-1" id="statVoidCount">0</p>
+        </div>
+      </div>
+
+      <!-- TABLE -->
+      <div class="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
+        <div class="p-4 bg-amber-50 border-b border-amber-200 flex justify-between items-center">
+          <h3 class="font-bold text-amber-900" data-key="listHeading">Receipts List</h3>
+          <span class="text-xs font-medium text-gray-500" id="recordsFoundCount">0 records found</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-amber-100/70 text-amber-900 font-bold border-b border-amber-200">
+              <tr>
+                <th class="p-3" data-key="thReceiptNo">Receipt No.</th>
+                <th class="p-3" data-key="thDate">Date</th>
+                <th class="p-3" data-key="thDonor">Donor Name</th>
+                <th class="p-3" data-key="thMobile">Mobile</th>
+                <th class="p-3" data-key="thTotal">Total Amount</th>
+                <th class="p-3" data-key="thStatus">Status</th>
+                <th class="p-3 text-center" data-key="thAction">Action</th>
+              </tr>
+            </thead>
+            <tbody id="receiptsTableBody" class="divide-y divide-gray-100">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. UPLOAD DONOR DB VIEW -->
+    <section id="view-upload-db" class="hidden max-w-2xl mx-auto">
+      <div class="bg-white p-8 rounded-2xl shadow-sm border border-amber-200 text-center space-y-4">
+        <div class="w-16 h-16 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-2xl">
+          <i class="fa-solid fa-file-csv"></i>
+        </div>
+        <h2 class="text-xl font-bold text-red-900" data-key="uploadHeader">Upload Donor Master Excel File</h2>
+        <p class="text-sm text-gray-600" data-key="uploadDesc">Upload your existing donor Excel sheet (.xlsx, .csv). The system auto-parses donor names, addresses, and phone numbers.</p>
+        
+        <div class="border-2 border-dashed border-amber-300 rounded-2xl p-6 bg-amber-50/50 hover:bg-amber-50 transition">
+          <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" onchange="handleExcelUpload(event)" class="hidden">
+          <label for="excelFileInput" class="cursor-pointer flex flex-col items-center justify-center space-y-2">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl text-amber-600"></i>
+            <span class="text-sm font-bold text-amber-900" data-key="btnSelectFile">Click to Select Excel File</span>
+          </label>
+        </div>
+
+        <div id="dbStatusInfo" class="text-xs font-semibold text-gray-500 pt-2">
+          Currently loaded: <span id="loadedDonorsCount" class="text-amber-800 font-bold">0</span> donors in search memory.
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PRINTABLE RECEIPT MODAL WITH WHATSAPP BTN -->
+  <div id="printableReceiptModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative border-4 border-amber-800">
+      <button onclick="closeReceiptModal()" class="no-print absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+
+      <!-- PRINTABLE AREA -->
+      <div id="receiptContent" class="space-y-4 text-center">
+        <div class="border-b-2 border-amber-800 pb-3">
+          <div class="text-red-900 font-bold text-xl tracking-wide">卐 Shri Digamber Jain Mandir Bhogal 卐</div>
+          <div class="text-xs font-semibold text-amber-900">Jain Sabha Registered Bhogal, New Delhi - 110014</div>
+          <div class="text-xs text-gray-600">Mob: +91-9810XXXXXX</div>
+        </div>
+
+        <div class="flex justify-between text-xs font-bold border-b pb-2 text-gray-700">
+          <span>Receipt No: <span id="rNo" class="text-red-900">--</span></span>
+          <span>Date: <span id="rDate">--</span></span>
+        </div>
+
+        <div class="text-left text-xs space-y-1 bg-amber-50/60 p-2.5 rounded border border-amber-200">
+          <div><span class="font-bold">Donor Name:</span> <span id="rName" class="font-semibold text-gray-900">--</span></div>
+          <div><span class="font-bold">Phone:</span> <span id="rPhone">--</span></div>
+          <div><span class="font-bold">Address:</span> <span id="rAddress">--</span></div>
+        </div>
+
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="border-b bg-amber-100/50">
+              <th class="py-1 px-2 font-bold">Daan Category</th>
+              <th class="py-1 px-2 font-bold text-right">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="rTableItems" class="divide-y">
+          </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-gray-800 font-bold bg-amber-100/80 text-sm">
+              <td class="py-1 px-2">Total Amount</td>
+              <td class="py-1 px-2 text-right text-red-900" id="rTotal">₹ 0</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="pt-8 flex justify-between items-end text-xs font-bold text-gray-700">
+          <div class="text-center">
+            <div class="w-24 border-b border-gray-400 mb-1"></div>
+            <span>Volunteer Sign</span>
+          </div>
+          <div class="text-center">
+            <div class="w-24 border-b border-gray-400 mb-1"></div>
+            <span>Dignitaries Sign</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL ACTION BUTTONS INCLUDING WHATSAPP SHARE -->
+      <div class="no-print mt-6 flex flex-col gap-2">
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow flex items-center justify-center gap-2 text-sm">
+            <i class="fa-solid fa-print"></i> Print Receipt
+          </button>
+          <button id="btnWhatsappShare" onclick="shareOnWhatsapp()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl shadow flex items-center justify-center gap-2 text-sm">
+            <i class="fa-brands fa-whatsapp text-lg"></i> Share WhatsApp
+          </button>
+        </div>
+        <button onclick="closeReceiptModal()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-xl text-sm">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIREBASE MODULE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD1rJVXTc52hQfVg2XXpzDm6nkOD2RMLEg",
+      authDomain: "jain-sabha-bhogal.firebaseapp.com",
+      projectId: "jain-sabha-bhogal",
+      storageBucket: "jain-sabha-bhogal.firebasestorage.app",
+      messagingSenderId: "178514372771",
+      appId: "1:178514372771:web:99c3a9f571fa6a7c70f716",
+      measurementId: "G-L6HE1C11DX"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.db = db;
+    window.receiptsCol = collection(db, "receipts");
+    window.addDoc = addDoc;
+    window.updateDoc = updateDoc;
+    window.doc = doc;
+
+    onSnapshot(collection(db, "receipts"), (snapshot) => {
+      let receiptsData = [];
+      snapshot.forEach((doc) => {
+        receiptsData.push({ id: doc.id, ...doc.data() });
+      });
+      window.cloudReceipts = receiptsData;
+      renderReceiptsTable();
+    }, (error) => {
+      console.warn("Firestore sync offline fallback to LocalStorage", error);
+      document.getElementById("syncBadge").className = "bg-amber-800/80 text-amber-200 text-xs px-3 py-1.5 rounded-full border border-amber-500/30 flex items-center gap-1.5 shadow-sm";
+      document.getElementById("syncText").innerText = "Offline Mode";
+    });
+  </script>
+
+  <!-- APPLICATION LOGIC JS -->
+  <script>
+    const dict = {
+      en: {
+        headerTitle: "Shri Digamber Jain Mandir Bhogal",
+        headerSub: "Jain Sabha Registered Bhogal, New Delhi - 110014 | Mob: +91-9810XXXXXX",
+        tabNewReceipt: "New Receipt",
+        tabReports: "Reports & Analytics",
+        tabUploadDb: "Upload Donor DB",
+        donorInfoHeading: "Donor Information",
+        labelName: "Donor Name*",
+        labelPhone: "Phone Number",
+        labelAddress: "Address",
+        donationBreakdownHeading: "Donation Categories (Amounts in ₹)",
+        daanAhaar: "Ahaar Daan (आहार दान)",
+        daanSamagri: "Samagri Daan (सामग्री दान)",
+        daanAushadhi: "Aushadhi Daan (औषधि दान)",
+        daanPakshi: "Pakshi Ahaar Daan (पक्षी आहार)",
+        daanNirmaan: "Mandir Nirmaan Daan (निर्माण)",
+        daanOther: "Other / Custom Daan (अन्य)",
+        grandTotalLabel: "Grand Total Amount",
+        qrHeading: "Scan & Pay via UPI / GPay",
+        btnPrint: "Save & Print Receipt",
+        btnClear: "Clear Form",
+        filterHeading: "Report Filters & Export",
+        lblFromDate: "From Date:",
+        lblToDate: "To Date:",
+        btnApplyFilter: "Apply Filters",
+        btnExportExcel: "Download Excel Report",
+        lblTotalColl: "Total Collection",
+        lblValidReceipts: "Valid Receipts",
+        lblCancelledReceipts: "Cancelled Receipts",
+        listHeading: "Receipts List",
+        thReceiptNo: "Receipt No.",
+        thDate: "Date",
+        thDonor: "Donor Name",
+        thMobile: "Mobile",
+        thTotal: "Total Amount",
+        thStatus: "Status",
+        thAction: "Action",
+        uploadHeader: "Upload Donor Master Excel File",
+        uploadDesc: "Upload your existing donor Excel sheet (.xlsx, .csv). The system auto-parses donor names, addresses, and phone numbers.",
+        btnSelectFile: "Click to Select Excel File"
+      },
+      hi: {
+        headerTitle: "श्री दिगंबर जैन मंदिर भोगल",
+        headerSub: "जैन सभा रजिस्टर्ड भोगल, नई दिल्ली - 110014 | मो: +91-9810XXXXXX",
+        tabNewReceipt: "नया रसीद बनाएं",
+        tabReports: "रिपोर्ट्स और विश्लेषण",
+        tabUploadDb: "दानदाता डेटाबेस अपलोड",
+        donorInfoHeading: "दानदाता की जानकारी",
+        labelName: "दानदाता का नाम*",
+        labelPhone: "मोबाइल नंबर",
+        labelAddress: "पता",
+        donationBreakdownHeading: "दान की श्रेणियां (राशि ₹ में)",
+        daanAhaar: "आहार दान",
+        daanSamagri: "सामग्री दान",
+        daanAushadhi: "औषधि दान",
+        daanPakshi: "पक्षी आहार दान",
+        daanNirmaan: "मंदिर निर्माण दान",
+        daanOther: "अन्य विशेष दान",
+        grandTotalLabel: "कुल योग राशि",
+        qrHeading: "क्यूआर कोड स्कैन करके भुगतान करें",
+        btnPrint: "रसीद सहेजें एवं प्रिंट करें",
+        btnClear: "फॉर्म साफ करें",
+        filterHeading: "रिपोर्ट फ़िल्टर और निर्यात",
+        lblFromDate: "प्रारंभिक तिथि:",
+        lblToDate: "अंतिम तिथि:",
+        btnApplyFilter: "फ़िल्टर लागू करें",
+        btnExportExcel: "एक्सेल रिपोर्ट डाउनलोड करें",
+        lblTotalColl: "कुल जमा राशि",
+        lblValidReceipts: "वैध रसीदें",
+        lblCancelledReceipts: "रद्द रसीदें",
+        listHeading: "रसीदों की सूची",
+        thReceiptNo: "रसीद संख्या",
+        thDate: "दिनांक",
+        thDonor: "दानदाता",
+        thMobile: "मोबाइल",
+        thTotal: "कुल राशि",
+        thStatus: "स्थिति",
+        thAction: "कार्रवाई",
+        uploadHeader: "दानदाता मास्टर एक्सेल फ़ाइल अपलोड करें",
+        uploadDesc: "अपनी मौजूदा एक्सेल शीट अपलोड करें। सिस्टम स्वचालित रूप से नाम, पता और मोबाइल नंबर अलग कर लेता है।",
+        btnSelectFile: "एक्सेल फ़ाइल चुनने के लिए क्लिक करें"
+      }
+    };
+
+    let currentLang = 'en';
+    let donorDatabase = [];
+    let currentGrandTotal = 0;
+    let currentActiveReceipt = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedLang = localStorage.getItem('jain_lang') || 'en';
+      setLanguage(savedLang);
+
+      const savedDonors = localStorage.getItem('jain_donors');
+      if (savedDonors) {
+        donorDatabase = JSON.parse(savedDonors);
+        document.getElementById('loadedDonorsCount').innerText = donorDatabase.length;
+      }
+
+      const upiString = "upi://pay?pa=shridigamberjainmandirbhogal@upi&pn=Shri%20Digamber%20Jain%20Mandir%20Bhogal&cu=INR";
+      new QRCode(document.getElementById("qrcodeCanvas"), { text: upiString, width: 140, height: 140 });
+
+      renderReceiptsTable();
+    });
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('jain_lang', lang);
+
+      document.getElementById('langHi').className = lang === 'hi' ? "px-3 py-1 rounded-md bg-amber-500 text-red-950 font-semibold shadow" : "px-3 py-1 rounded-md transition duration-200 text-amber-200 hover:text-white";
+      document.getElementById('langEn').className = lang === 'en' ? "px-3 py-1 rounded-md bg-amber-500 text-red-950 font-semibold shadow" : "px-3 py-1 rounded-md transition duration-200 text-amber-200 hover:text-white";
+
+      document.querySelectorAll('[data-key]').forEach(elem => {
+        const key = elem.getAttribute('data-key');
+        if (dict[lang][key]) elem.innerText = dict[lang][key];
+      });
+
+      renderReceiptsTable();
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('text-red-900', 'border-red-800');
+        btn.classList.add('text-gray-600', 'border-transparent');
+      });
+
+      document.getElementById(`view-${tabName}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tabName}`);
+      activeBtn.classList.remove('text-gray-600', 'border-transparent');
+      activeBtn.classList.add('text-red-900', 'border-red-800');
+
+      if (tabName === 'reports') renderReceiptsTable();
+    }
+
+    function handleNameSearch(val) {
+      const box = document.getElementById('suggestionsBox');
+      const query = val.trim().toLowerCase();
+
+      if (query.length < 3 || donorDatabase.length === 0) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      const matches = donorDatabase.filter(d => d.name.toLowerCase().includes(query)).slice(0, 10);
+      if (matches.length === 0) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      box.innerHTML = matches.map(m => `
+        <div onclick='selectDonor(${JSON.stringify(m).replace(/'/g, "&apos;")})' class="p-3 hover:bg-amber-50 cursor-pointer border-b border-amber-100 last:border-0 text-left">
+          <div class="font-bold text-red-900 text-base">${m.name}</div>
+          <div class="text-xs text-gray-600">${m.address ? m.address : 'No Address'} ${m.phone ? ' | 📞 ' + m.phone : ''}</div>
+        </div>
+      `).join('');
+
+      box.classList.remove('hidden');
+    }
+
+    function selectDonor(donor) {
+      document.getElementById('donorName').value = donor.name || '';
+      document.getElementById('donorPhone').value = donor.phone || '';
+      document.getElementById('donorAddress').value = donor.address || '';
+      document.getElementById('suggestionsBox').classList.add('hidden');
+    }
+
+    function calculateTotal() {
+      const inputs = document.querySelectorAll('.daan-input');
+      let total = 0;
+      inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val) && val > 0) total += val;
+      });
+      currentGrandTotal = total;
+      document.getElementById('grandTotalDisplay').innerText = `₹ ${total.toLocaleString('en-IN')}`;
+    }
+
+    function clearForm() {
+      document.getElementById('donorName').value = '';
+      document.getElementById('donorPhone').value = '';
+      document.getElementById('donorAddress').value = '';
+      document.getElementById('otherDaanRemark').value = '';
+      document.querySelectorAll('.daan-input').forEach(i => i.value = '');
+      calculateTotal();
+      document.getElementById('suggestionsBox').classList.add('hidden');
+    }
+
+    async function saveAndPrintReceipt() {
+      const name = document.getElementById('donorName').value.trim();
+      if (!name) {
+        alert(currentLang === 'hi' ? 'कृपया दानदाता का नाम दर्ज करें।' : 'Please enter donor name.');
+        return;
+      }
+
+      if (currentGrandTotal <= 0) {
+        alert(currentLang === 'hi' ? 'कृपया कम से कम एक दान श्रेणी दर्ज करें।' : 'Please enter amount in at least one donation category.');
+        return;
+      }
+
+      let allData = window.cloudReceipts || JSON.parse(localStorage.getItem('jain_local_receipts') || '[]');
+      let nextSeq = allData.length + 1;
+      const receiptNo = `SDJMB/${new Date().getFullYear()}/${String(nextSeq).padStart(4, '0')}`;
+      const dateStr = new Date().toLocaleDateString('en-GB');
+
+      const inputs = document.querySelectorAll('.daan-input');
+      const categories = ['daanAhaar', 'daanSamagri', 'daanAushadhi', 'daanPakshi', 'daanNirmaan', 'daanOther'];
+      const remark = document.getElementById('otherDaanRemark').value.trim();
+
+      let breakdown = {};
+      inputs.forEach((input, idx) => {
+        const val = parseFloat(input.value) || 0;
+        if (val > 0) {
+          let catKey = dict['en'][categories[idx]];
+          if (categories[idx] === 'daanOther' && remark) {
+            catKey += ` (${remark})`;
+          }
+          breakdown[catKey] = val;
+        }
+      });
+
+      const receiptData = {
+        receiptNo: receiptNo,
+        date: dateStr,
+        timestamp: Date.now(),
+        name: name,
+        phone: document.getElementById('donorPhone').value.trim() || 'N/A',
+        address: document.getElementById('donorAddress').value.trim() || 'N/A',
+        breakdown: breakdown,
+        total: currentGrandTotal,
+        status: 'VALID'
+      };
+
+      if (window.receiptsCol && window.addDoc) {
+        try {
+          await window.addDoc(window.receiptsCol, receiptData);
+        } catch (e) {
+          saveLocally(receiptData);
+        }
+      } else {
+        saveLocally(receiptData);
+      }
+
+      openReceiptModal(receiptData);
+      clearForm();
+    }
+
+    function saveLocally(data) {
+      let local = JSON.parse(localStorage.getItem('jain_local_receipts') || '[]');
+      local.push(data);
+      localStorage.setItem('jain_local_receipts', JSON.stringify(local));
+      renderReceiptsTable();
+    }
+
+    function renderReceiptsTable() {
+      let data = window.cloudReceipts || JSON.parse(localStorage.getItem('jain_local_receipts') || '[]');
+      const tbody = document.getElementById('receiptsTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+      let totalColl = 0, validCount = 0, voidCount = 0;
+
+      data.sort((a,b) => b.timestamp - a.timestamp).forEach((r) => {
+        if (r.status === 'VALID') {
+          totalColl += r.total;
+          validCount++;
+        } else {
+          voidCount++;
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-amber-50/50";
+        tr.innerHTML = `
+          <td class="p-3 font-bold text-red-900">${r.receiptNo}</td>
+          <td class="p-3">${r.date}</td>
+          <td class="p-3 font-semibold text-gray-800">${r.name}</td>
+          <td class="p-3">${r.phone}</td>
+          <td class="p-3 font-bold text-emerald-700">₹ ${r.total.toLocaleString('en-IN')}</td>
+          <td class="p-3">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${r.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+              ${r.status === 'VALID' ? (currentLang === 'hi' ? 'वैध' : 'Valid') : (currentLang === 'hi' ? 'रद्द' : 'Cancelled')}
+            </span>
+          </td>
+          <td class="p-3 text-center space-x-2">
+            <button onclick='openReceiptModal(${JSON.stringify(r).replace(/'/g, "&apos;")})' class="text-amber-700 hover:text-amber-900 text-base" title="Reprint"><i class="fa-solid fa-print"></i></button>
+            ${r.status === 'VALID' ? `<button onclick="voidReceipt('${r.id || r.receiptNo}')" class="text-red-600 hover:text-red-800 text-base" title="Cancel"><i class="fa-solid fa-ban"></i></button>` : ''}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('statTotalAmount').innerText = `₹ ${totalColl.toLocaleString('en-IN')}`;
+      document.getElementById('statValidCount').innerText = validCount;
+      document.getElementById('statVoidCount').innerText = voidCount;
+      document.getElementById('recordsFoundCount').innerText = `${data.length} records found`;
+    }
+
+    async function voidReceipt(idOrNo) {
+      if (!confirm(currentLang === 'hi' ? 'क्या आप इस रसीद को रद्द करना चाहते हैं?' : 'Are you sure you want to cancel this receipt?')) return;
+
+      if (window.cloudReceipts) {
+        const item = window.cloudReceipts.find(r => r.id === idOrNo || r.receiptNo === idOrNo);
+        if (item && item.id && window.doc && window.updateDoc) {
+          const docRef = window.doc(window.db, "receipts", item.id);
+          await window.updateDoc(docRef, { status: 'VOID' });
+          return;
+        }
+      }
+
+      let local = JSON.parse(localStorage.getItem('jain_local_receipts') || '[]');
+      local = local.map(r => r.receiptNo === idOrNo ? { ...r, status: 'VOID' } : r);
+      localStorage.setItem('jain_local_receipts', JSON.stringify(local));
+      renderReceiptsTable();
+    }
+
+    // --- RECEIPT MODAL & WHATSAPP FUNCTIONALITY ---
+    function openReceiptModal(r) {
+      currentActiveReceipt = r;
+      document.getElementById('rNo').innerText = r.receiptNo;
+      document.getElementById('rDate').innerText = r.date;
+      document.getElementById('rName').innerText = r.name;
+      document.getElementById('rPhone').innerText = r.phone;
+      document.getElementById('rAddress').innerText = r.address;
+
+      const itemsTbody = document.getElementById('rTableItems');
+      itemsTbody.innerHTML = '';
+      for (const [k, v] of Object.entries(r.breakdown || {})) {
+        itemsTbody.innerHTML += `<tr><td class="py-1 px-2">${k}</td><td class="py-1 px-2 text-right font-semibold">₹ ${v.toLocaleString('en-IN')}</td></tr>`;
+      }
+
+      document.getElementById('rTotal').innerText = `₹ ${r.total.toLocaleString('en-IN')}`;
+      
+      // WhatsApp Share button configuration
+      const wsBtn = document.getElementById('btnWhatsappShare');
+      const cleanPhone = (r.phone || '').replace(/[^0-9]/g, '');
+      if (cleanPhone.length >= 10) {
+        wsBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        wsBtn.disabled = false;
+      } else {
+        wsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        wsBtn.disabled = true;
+      }
+
+      document.getElementById('printableReceiptModal').classList.remove('hidden');
+    }
+
+    function shareOnWhatsapp() {
+      if (!currentActiveReceipt) return;
+      
+      const cleanPhone = (currentActiveReceipt.phone || '').replace(/[^0-9]/g, '');
+      if (cleanPhone.length < 10) {
+        alert("Valid mobile number not available for this donor.");
+        return;
+      }
+
+      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      
+      // Customized Message
+      const message = `🙏 *जय जिनेंद्र ${currentActiveReceipt.name} जी* 🙏\n\n*श्री दिगंबर जैन मंदिर भोगल* में आपके ₹${currentActiveReceipt.total.toLocaleString('en-IN')} के दान की रसीद सफलतापूर्वक बन गई है।\n\n📌 *रसीद विवरण:* \n• **रसीद संख्या:** ${currentActiveReceipt.receiptNo}\n• **दिनांक:** ${currentActiveReceipt.date}\n• **कुल राशि:** ₹${currentActiveReceipt.total.toLocaleString('en-IN')}\n\nधर्म कार्य में सहयोग हेतु आपका धन्यवाद!\n*श्री दिगंबर जैन मंदिर सभा, भोगल*`;
+
+      const encodedMsg = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMsg}`;
+      
+      window.open(whatsappUrl, '_blank');
+    }
+
+    function closeReceiptModal() {
+      document.getElementById('printableReceiptModal').classList.add('hidden');
+      currentActiveReceipt = null;
+    }
+
+    function handleExcelUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[workbook.SheetNames.length - 1]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        let parsedDonors = [];
+        json.forEach(row => {
+          row.forEach(cell => {
+            if (cell && typeof cell === 'string' && cell.length > 5) {
+              const phoneMatch = cell.match(/\(\d{5}-\d{5}\)/) || cell.match(/\d{10}/);
+              let phone = phoneMatch ? phoneMatch[0].replace(/[()]/g, '') : '';
+              let cleanStr = cell.replace(/\(\d{5}-\d{5}\)/, '').trim();
+              let name = cleanStr;
+              let address = '';
+
+              const splitMatch = cleanStr.match(/^(.*?)(?=\s\d+|\s[A-Z]\s|\sA-|\sC\/O|\sBHOGAL|\sJANGPURA|\sNAGAR|\sROAD|\sNFC)/i);
+              if (splitMatch && splitMatch[1]) {
+                name = splitMatch[1].trim();
+                address = cleanStr.replace(name, '').trim();
+              }
+
+              if (name.length >= 3 && !name.includes('ANANTCHODAS') && !name.includes('NAME')) {
+                parsedDonors.push({ name, address, phone });
+              }
+            }
+          });
+        });
+
+        donorDatabase = parsedDonors;
+        localStorage.setItem('jain_donors', JSON.stringify(parsedDonors));
+        document.getElementById('loadedDonorsCount').innerText = parsedDonors.length;
+        alert(currentLang === 'hi' ? `${parsedDonors.length} दानदाताओं की सूची सफलतापूर्वक लोड हो गई!` : `Successfully loaded ${parsedDonors.length} donors!`);
+        switchTab('new-receipt');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function exportToExcel() {
+      let data = window.cloudReceipts || JSON.parse(localStorage.getItem('jain_local_receipts') || '[]');
+      if (data.length === 0) {
+        alert("No receipts available to export.");
+        return;
+      }
+
+      let exportData = data.map(r => ({
+        "Receipt No": r.receiptNo,
+        "Date": r.date,
+        "Donor Name": r.name,
+        "Phone": r.phone,
+        "Address": r.address,
+        "Total Amount": r.total,
+        "Status": r.status
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Donations");
+      XLSX.writeFile(workbook, `Jain_Mandir_Donations_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+  </script>
+</body>
+</html>
