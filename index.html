@@ -303,21 +303,21 @@
     <section id="view-upload-db" class="hidden max-w-2xl mx-auto">
       <div class="bg-white p-8 rounded-2xl shadow-sm border border-amber-200 text-center space-y-4">
         <div class="w-16 h-16 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-2xl">
-          <i class="fa-solid fa-file-csv"></i>
+          <i class="fa-solid fa-cloud-arrow-up"></i>
         </div>
         <h2 class="text-xl font-bold text-red-900" data-key="uploadHeader">Upload Donor Master Excel File</h2>
-        <p class="text-sm text-gray-600" data-key="uploadDesc">Upload your existing donor Excel sheet (.xlsx, .csv). The system auto-parses donor names, addresses, and phone numbers.</p>
+        <p class="text-sm text-gray-600" data-key="uploadDesc">Upload your existing donor Excel sheet (.xlsx, .csv). Data will automatically sync with Firebase Cloud to work across all Mobile and Laptop devices.</p>
         
         <div class="border-2 border-dashed border-amber-300 rounded-2xl p-6 bg-amber-50/50 hover:bg-amber-50 transition">
           <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" onchange="handleExcelUpload(event)" class="hidden">
           <label for="excelFileInput" class="cursor-pointer flex flex-col items-center justify-center space-y-2">
-            <i class="fa-solid fa-cloud-arrow-up text-3xl text-amber-600"></i>
-            <span class="text-sm font-bold text-amber-900" data-key="btnSelectFile">Click to Select Excel File</span>
+            <i class="fa-solid fa-file-excel text-3xl text-amber-600"></i>
+            <span class="text-sm font-bold text-amber-900" id="uploadStatusText" data-key="btnSelectFile">Click to Select Excel File</span>
           </label>
         </div>
 
         <div id="dbStatusInfo" class="text-xs font-semibold text-gray-500 pt-2">
-          Currently loaded: <span id="loadedDonorsCount" class="text-amber-800 font-bold">0</span> donors in search memory.
+          Currently loaded: <span id="loadedDonorsCount" class="text-amber-800 font-bold">0</span> donors in Cloud memory.
         </div>
       </div>
     </section>
@@ -334,7 +334,7 @@
         <div class="border-b-2 border-amber-800 pb-3">
           <div class="text-red-900 font-bold text-xl tracking-wide">卐 Shri Digamber Jain Mandir Bhogal 卐</div>
           <div class="text-xs font-semibold text-amber-900">Jain Sabha Registered Bhogal, New Delhi - 110014</div>
-          <div class="text-xs text-gray-600">Mob: +91-9810XXXXXX</div>
+          <div class="text-xs text-gray-600">Mob: +91-9811277267</div>
         </div>
 
         <div class="flex justify-between text-xs font-bold border-b pb-2 text-gray-700">
@@ -397,7 +397,7 @@
   <!-- FIREBASE MODULE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD1rJVXTc52hQfVg2XXpzDm6nkOD2RMLEg",
@@ -414,10 +414,13 @@
 
     window.db = db;
     window.receiptsCol = collection(db, "receipts");
+    window.donorsCol = collection(db, "donors");
     window.addDoc = addDoc;
     window.updateDoc = updateDoc;
     window.doc = doc;
+    window.writeBatch = writeBatch;
 
+    // Realtime Sync Receipts
     onSnapshot(collection(db, "receipts"), (snapshot) => {
       let receiptsData = [];
       snapshot.forEach((doc) => {
@@ -430,6 +433,39 @@
       document.getElementById("syncBadge").className = "bg-amber-800/80 text-amber-200 text-xs px-3 py-1.5 rounded-full border border-amber-500/30 flex items-center gap-1.5 shadow-sm";
       document.getElementById("syncText").innerText = "Offline Mode";
     });
+
+    // Realtime Sync Donor Database across all devices
+    onSnapshot(collection(db, "donors"), (snapshot) => {
+      let cloudDonors = [];
+      snapshot.forEach((doc) => {
+        cloudDonors.push(doc.data());
+      });
+      if (cloudDonors.length > 0) {
+        window.donorDatabase = cloudDonors;
+        localStorage.setItem('jain_donors', JSON.stringify(cloudDonors));
+        document.getElementById('loadedDonorsCount').innerText = cloudDonors.length;
+      }
+    });
+
+    // Sync Donors Batch Upload to Firestore
+    window.uploadDonorsToFirebase = async function(parsedDonors) {
+      try {
+        const batchSize = 400; // Firestore batch limit 500
+        for (let i = 0; i < parsedDonors.length; i += batchSize) {
+          const batch = writeBatch(db);
+          const chunk = parsedDonors.slice(i, i + batchSize);
+          chunk.forEach((donor) => {
+            const newDocRef = doc(collection(db, "donors"));
+            batch.set(newDocRef, donor);
+          });
+          await batch.commit();
+        }
+        return true;
+      } catch (err) {
+        console.error("Firebase Donor Upload Error: ", err);
+        return false;
+      }
+    };
   </script>
 
   <!-- APPLICATION LOGIC JS -->
@@ -437,7 +473,7 @@
     const dict = {
       en: {
         headerTitle: "Shri Digamber Jain Mandir Bhogal",
-        headerSub: "Jain Sabha Registered Bhogal, New Delhi - 110014 | Mob: +91-9810XXXXXX",
+        headerSub: "Jain Sabha Registered Bhogal, New Delhi - 110014 | Mob: +91-9811277267",
         tabNewReceipt: "New Receipt",
         tabReports: "Reports & Analytics",
         tabUploadDb: "Upload Donor DB",
@@ -473,12 +509,12 @@
         thStatus: "Status",
         thAction: "Action",
         uploadHeader: "Upload Donor Master Excel File",
-        uploadDesc: "Upload your existing donor Excel sheet (.xlsx, .csv). The system auto-parses donor names, addresses, and phone numbers.",
+        uploadDesc: "Upload your existing donor Excel sheet (.xlsx, .csv). Data will automatically sync with Firebase Cloud to work across all Mobile and Laptop devices.",
         btnSelectFile: "Click to Select Excel File"
       },
       hi: {
         headerTitle: "श्री दिगंबर जैन मंदिर भोगल",
-        headerSub: "जैन सभा रजिस्टर्ड भोगल, नई दिल्ली - 110014 | मो: +91-9810XXXXXX",
+        headerSub: "जैन सभा रजिस्टर्ड भोगल, नई दिल्ली - 110014 | मो: +91-9811277267",
         tabNewReceipt: "नया रसीद बनाएं",
         tabReports: "रिपोर्ट्स और विश्लेषण",
         tabUploadDb: "दानदाता डेटाबेस अपलोड",
@@ -514,13 +550,13 @@
         thStatus: "स्थिति",
         thAction: "कार्रवाई",
         uploadHeader: "दानदाता मास्टर एक्सेल फ़ाइल अपलोड करें",
-        uploadDesc: "अपनी मौजूदा एक्सेल शीट अपलोड करें। सिस्टम स्वचालित रूप से नाम, पता और मोबाइल नंबर अलग कर लेता है।",
+        uploadDesc: "अपनी मौजूदा एक्सेल शीट अपलोड करें। डेटा स्वचालित रूप से मोबाइल और लैपटॉप सभी में सिंक हो जाएगा।",
         btnSelectFile: "एक्सेल फ़ाइल चुनने के लिए क्लिक करें"
       }
     };
 
     let currentLang = 'en';
-    let donorDatabase = [];
+    window.donorDatabase = [];
     let currentGrandTotal = 0;
     let currentActiveReceipt = null;
 
@@ -530,8 +566,8 @@
 
       const savedDonors = localStorage.getItem('jain_donors');
       if (savedDonors) {
-        donorDatabase = JSON.parse(savedDonors);
-        document.getElementById('loadedDonorsCount').innerText = donorDatabase.length;
+        window.donorDatabase = JSON.parse(savedDonors);
+        document.getElementById('loadedDonorsCount').innerText = window.donorDatabase.length;
       }
 
       const upiString = "upi://pay?pa=shridigamberjainmandirbhogal@upi&pn=Shri%20Digamber%20Jain%20Mandir%20Bhogal&cu=INR";
@@ -574,12 +610,12 @@
       const box = document.getElementById('suggestionsBox');
       const query = val.trim().toLowerCase();
 
-      if (query.length < 3 || donorDatabase.length === 0) {
+      if (query.length < 3 || !window.donorDatabase || window.donorDatabase.length === 0) {
         box.classList.add('hidden');
         return;
       }
 
-      const matches = donorDatabase.filter(d => d.name.toLowerCase().includes(query)).slice(0, 10);
+      const matches = window.donorDatabase.filter(d => d.name && d.name.toLowerCase().includes(query)).slice(0, 10);
       if (matches.length === 0) {
         box.classList.add('hidden');
         return;
@@ -767,7 +803,6 @@
 
       document.getElementById('rTotal').innerText = `₹ ${r.total.toLocaleString('en-IN')}`;
       
-      // WhatsApp Share button configuration
       const wsBtn = document.getElementById('btnWhatsappShare');
       const cleanPhone = (r.phone || '').replace(/[^0-9]/g, '');
       if (cleanPhone.length >= 10) {
@@ -792,7 +827,6 @@
 
       const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
       
-      // Customized Message
       const message = `🙏 *जय जिनेंद्र ${currentActiveReceipt.name} जी* 🙏\n\n*श्री दिगंबर जैन मंदिर भोगल* में आपके ₹${currentActiveReceipt.total.toLocaleString('en-IN')} के दान की रसीद सफलतापूर्वक बन गई है।\n\n📌 *रसीद विवरण:* \n• **रसीद संख्या:** ${currentActiveReceipt.receiptNo}\n• **दिनांक:** ${currentActiveReceipt.date}\n• **कुल राशि:** ₹${currentActiveReceipt.total.toLocaleString('en-IN')}\n\nधर्म कार्य में सहयोग हेतु आपका धन्यवाद!\n*श्री दिगंबर जैन मंदिर सभा, भोगल*`;
 
       const encodedMsg = encodeURIComponent(message);
@@ -806,12 +840,15 @@
       currentActiveReceipt = null;
     }
 
-    function handleExcelUpload(e) {
+    async function handleExcelUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
 
+      const statusText = document.getElementById('uploadStatusText');
+      statusText.innerText = "Processing & Syncing with Cloud...";
+
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = async function(evt) {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[workbook.SheetNames.length - 1]];
@@ -840,10 +877,18 @@
           });
         });
 
-        donorDatabase = parsedDonors;
+        window.donorDatabase = parsedDonors;
         localStorage.setItem('jain_donors', JSON.stringify(parsedDonors));
         document.getElementById('loadedDonorsCount').innerText = parsedDonors.length;
-        alert(currentLang === 'hi' ? `${parsedDonors.length} दानदाताओं की सूची सफलतापूर्वक लोड हो गई!` : `Successfully loaded ${parsedDonors.length} donors!`);
+
+        // Push to Firebase Cloud
+        if (window.uploadDonorsToFirebase) {
+          statusText.innerText = "Uploading to Cloud Database...";
+          await window.uploadDonorsToFirebase(parsedDonors);
+        }
+
+        statusText.innerText = dict[currentLang]['btnSelectFile'];
+        alert(currentLang === 'hi' ? `${parsedDonors.length} दानदाताओं की सूची सफलतापूर्वक क्लाउड में सिंक हो गई!` : `Successfully synced ${parsedDonors.length} donors to Cloud!`);
         switchTab('new-receipt');
       };
       reader.readAsArrayBuffer(file);
