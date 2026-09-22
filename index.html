@@ -34,27 +34,33 @@
     }
 
     @media print {
-      body * {
-        visibility: hidden;
-      }
-      #printableReceiptModal, #printableReceiptModal * {
-        visibility: visible;
-      }
-      #printableReceiptModal {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: auto;
-        background: white !important;
-        box-shadow: none !important;
-        border: none !important;
-      }
-      .no-print {
-        display: none !important;
-      }
-    }
-  </style>
+  @page {
+    size: A5 landscape; /* Ya Portrait according to preference */
+    margin: 10mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #printableReceiptModal, #printableReceiptModal * {
+    visibility: visible;
+  }
+  #printableReceiptModal {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+</style>
 </head>
 <body class="text-gray-800 min-h-screen flex flex-col">
 
